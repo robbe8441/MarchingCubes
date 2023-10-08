@@ -102,4 +102,80 @@ function MainModule.GenChunk(X,Y,Z)
 end
 
 
+
+
+function RayCast(vOrigin:Vector3, vGoal:Vector3)
+	local vRayDir = (vGoal - vOrigin).Unit
+	
+    local RayUnitStepSize = {
+        X = math.sqrt(1 + (vRayDir.Y / vRayDir.X)^2 + (vRayDir.Z / vRayDir.X)^2), 
+        Y = math.sqrt(1 + (vRayDir.X / vRayDir.Y)^2 + (vRayDir.Z / vRayDir.Y)^2),
+        Z = math.sqrt(1 + (vRayDir.X / vRayDir.Z)^2 + (vRayDir.Y / vRayDir.Z)^2)}
+
+
+	local Step = {}
+	local RayLength1D = {}
+	local MapCheck = Vector3.new(math.floor(vOrigin.X), math.floor(vOrigin.Y), math.floor(vOrigin.Z))
+
+	-- // Setup Grid
+
+	if vRayDir.X < 0 then
+        RayLength1D.X = (vOrigin.X - MapCheck.X) * RayUnitStepSize.X
+        Step.X = -1
+    else
+        RayLength1D.X = ((MapCheck.X + 1) - vOrigin.X) * RayUnitStepSize.X
+        Step.X = 1
+    end
+	
+    if vRayDir.Y < 0 then
+        RayLength1D.Y = (vOrigin.Y - MapCheck.Y) * RayUnitStepSize.Y
+        Step.Y = -1
+    else
+        RayLength1D.Y = ((MapCheck.Y + 1) - vOrigin.Y) * RayUnitStepSize.Y
+        Step.Y = 1
+    end
+
+    if vRayDir.Z < 0 then
+        RayLength1D.Z = (vOrigin.Z - MapCheck.Z) * RayUnitStepSize.Z
+        Step.Z = -1
+    else
+        RayLength1D.Z = ((MapCheck.Z + 1) - vOrigin.Z) * RayUnitStepSize.Z
+        Step.Z = 1
+    end
+
+
+	-- // RayCast
+	
+	local fMaxDis = 100
+	local fCurrentDis = 0
+	local Pos = Vector3.new()
+	
+	while fCurrentDis < fMaxDis do
+		local minRayLength = math.min(RayLength1D.X, RayLength1D.Y, RayLength1D.Z)
+		
+		if minRayLength == RayLength1D.X then
+			MapCheck += Vector3.new(Step.X, 0, 0)
+			fCurrentDis = RayLength1D.X
+			RayLength1D.X = RayLength1D.X + RayUnitStepSize.X
+
+		elseif minRayLength == RayLength1D.Y then
+			MapCheck += Vector3.new(0, Step.Y, 0)
+			fCurrentDis = RayLength1D.Y
+			RayLength1D.Y = RayLength1D.Y + RayUnitStepSize.Y
+
+		else
+			MapCheck += Vector3.new(0, 0, Step.Z)
+			fCurrentDis = RayLength1D.Z
+			RayLength1D.Z = RayLength1D.Z + RayUnitStepSize.Z
+		end 
+		
+		if GetBlock(MapCheck.X, MapCheck.Y, MapCheck.Z) then
+			break 
+		end
+	end
+    return vOrigin + vRayDir * fCurrentDis
+end
+
+
+
 return MainModule
