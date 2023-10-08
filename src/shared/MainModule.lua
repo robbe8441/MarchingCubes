@@ -1,3 +1,8 @@
+---------------------- // Variables \\ ----------------------
+
+local ChunkSize = 10
+local BlockSize = 4
+
 local MainModule = {}
 local Noise = require(script.Parent.Noise)()
 local Tables = require(script.Parent.Tables)
@@ -7,6 +12,8 @@ local wedge = Instance.new("WedgePart");
 wedge.Anchored = true;
 wedge.TopSurface = Enum.SurfaceType.Smooth;
 wedge.BottomSurface = Enum.SurfaceType.Smooth;
+
+---------------------- // Generate ChunkData \\ ----------------------
 
 function toDecimal(b)
 	local num = 0
@@ -27,6 +34,35 @@ function GetBlock(x,y,z)
 
 	return val/Reduce > 0.25
 end
+
+function MainModule.GenChunk(X,Y,Z)
+	local ChunkData = {}
+	local edgePoints = {}
+	local ChunkPos = Vector3.new(X,Y,Z) * ChunkSize
+
+	for i=0, ChunkSize ^ 3 - 1 do
+		local LocalData = {}
+		local x = (i % ChunkSize) + ChunkPos.X
+		local y = (math.floor(i / ChunkSize^2) % ChunkSize) + ChunkPos.Y
+		local z = (math.floor(i / ChunkSize) % ChunkSize) + ChunkPos.Z
+
+		for _,v in pairs(Tables.voltexdata) do
+			local InTable = x + v[1]/2 + (y + v[2]/2) * ChunkSize^2 + (z + v[3]/2) * ChunkSize
+
+			local v = edgePoints[InTable] or (GetBlock(x + v[1]/2, y + v[2]/2, z + v[3]/2) and 1 or 0)
+			table.insert(LocalData, v)
+		end
+
+		local BlockType = toDecimal(table.concat(LocalData))
+		table.insert(ChunkData, {x,y,z, BlockType})
+	end
+	return ChunkData
+end
+
+
+---------------------- // Generate Blocks \\ ----------------------
+
+
 
 function draw3dTriangle(a, b, c, parent)
 	local ab, ac, bc = b - a, c - a, c - b;
@@ -60,37 +96,13 @@ function draw3dTriangle(a, b, c, parent)
 end
 
 
-function MainModule.GenChunk(X,Y,Z)
-	local ChunkSize = 10
-	local BlockSize = 4
-	local ChunkData = {}
-	local edgePoints = {}
-	local ChunkPos = Vector3.new(X,Y,Z) * ChunkSize
-
-	for i=0, ChunkSize ^ 3 - 1 do
-		local LocalData = {}
-		local x = i % ChunkSize  + ChunkPos.X
-		local y = math.floor(i / ChunkSize^2) % ChunkSize  + ChunkPos.Y
-		local z = math.floor(i / ChunkSize) % ChunkSize  + ChunkPos.Z
-
-		for _,v in pairs(Tables.voltexdata) do
-			local InTable = x + v[1]/2 + (y + v[2]/2) * ChunkSize^2 + (z + v[3]/2) * ChunkSize
-
-			local v = edgePoints[InTable] or (GetBlock(x + v[1]/2, y + v[2]/2, z + v[3]/2) and 1 or 0)
-			table.insert(LocalData, v)
-		end
-
-		local BlockType = toDecimal(table.concat(LocalData))
-		table.insert(ChunkData, {x,y,z, BlockType})
-	end
-
+function MainModule.LoadChunk(ChunkData)
 	local ChunkModel = Instance.new("Model", workspace.Terrain)
 
 	for _,block in ipairs(ChunkData) do
 		local pos = Vector3.new(block[1], block[2], block[3])
 		local typ = Tables.VoxelList[block[4]]
 
-		
 		for i=1, #typ, 3 do
 			local a,b,c = Tables.PartEdgePoints[typ[i]], Tables.PartEdgePoints[typ[i+1]], Tables.PartEdgePoints[typ[i+2]]
 			a,b,c = Vector3.new(a[1], a[2], a[3])/2 + pos, Vector3.new(b[1], b[2], b[3])/2 + pos, Vector3.new(c[1], c[2], c[3])/2 + pos
@@ -104,14 +116,16 @@ end
 
 
 
-function RayCast(vOrigin:Vector3, vGoal:Vector3)
+---------------------- // Voxel Functions \\ ----------------------
+
+
+function MainModule.RayCast(vOrigin:Vector3, vGoal:Vector3)
 	local vRayDir = (vGoal - vOrigin).Unit
 	
     local RayUnitStepSize = {
         X = math.sqrt(1 + (vRayDir.Y / vRayDir.X)^2 + (vRayDir.Z / vRayDir.X)^2), 
         Y = math.sqrt(1 + (vRayDir.X / vRayDir.Y)^2 + (vRayDir.Z / vRayDir.Y)^2),
         Z = math.sqrt(1 + (vRayDir.X / vRayDir.Z)^2 + (vRayDir.Y / vRayDir.Z)^2)}
-
 
 	local Step = {}
 	local RayLength1D = {}
@@ -142,7 +156,6 @@ function RayCast(vOrigin:Vector3, vGoal:Vector3)
         RayLength1D.Z = ((MapCheck.Z + 1) - vOrigin.Z) * RayUnitStepSize.Z
         Step.Z = 1
     end
-
 
 	-- // RayCast
 	
