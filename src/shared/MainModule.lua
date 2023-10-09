@@ -1,6 +1,5 @@
 ---------------------- // Variables \\ ----------------------
-
-local ChunkSize = 10
+local ChunkSize = 16
 local BlockSize = 4
 
 local MainModule = {}
@@ -29,31 +28,32 @@ end
 function GetBlock(x,y,z)
 	local val = Noise:Get3DValue(x/50, y/50, z/50)
 	local Reduce = math.max(1, (y-5)/5)
-	local noise = Noise:Get3DValue(x/30, y/30, z/30)
+	local noise = math.noise(x/50, y/50, z/50) --Noise:Get3DValue(x/30, y/30, z/30)
 	val += noise / 4
 
 	return val/Reduce > 0.25
 end
 
-function MainModule.GenChunk(X,Y,Z)
-	local ChunkData = {}
-	local edgePoints = {}
+function MainModule.GenChunk(X,Y,Z, LodSize)
+	LodSize = LodSize or 1
+	local ChunkData = {{LodSize = LodSize}}
 	local ChunkPos = Vector3.new(X,Y,Z) * ChunkSize
+	local NewSize = ChunkSize / LodSize
 
-	for i=0, ChunkSize ^ 3 - 1 do
+	for i=0, NewSize ^ 3 - 1 do
 		local LocalData = {}
-		local x = (i % ChunkSize) + ChunkPos.X
-		local y = (math.floor(i / ChunkSize^2) % ChunkSize) + ChunkPos.Y
-		local z = (math.floor(i / ChunkSize) % ChunkSize) + ChunkPos.Z
+		
+		local x = (i % NewSize) * LodSize + ChunkPos.X
+		local y = (math.floor(i / NewSize^2) % NewSize) * LodSize + ChunkPos.Y
+		local z = (math.floor(i / NewSize) % NewSize) * LodSize + ChunkPos.Z
 
 		for _,v in pairs(Tables.voltexdata) do
-			local InTable = x + v[1]/2 + (y + v[2]/2) * ChunkSize^2 + (z + v[3]/2) * ChunkSize
-
-			local v = edgePoints[InTable] or (GetBlock(x + v[1]/2, y + v[2]/2, z + v[3]/2) and 1 or 0)
+			local v = GetBlock(x + v[1]/2*LodSize, y + v[2]/2*LodSize, z + v[3]/2*LodSize) and 1 or 0
 			table.insert(LocalData, v)
 		end
 
 		local BlockType = toDecimal(table.concat(LocalData))
+		if BlockType == 0 or BlockType == 255 then continue end
 		table.insert(ChunkData, {x,y,z, BlockType})
 	end
 	return ChunkData
@@ -98,14 +98,16 @@ end
 
 function MainModule.LoadChunk(ChunkData)
 	local ChunkModel = Instance.new("Model", workspace.Terrain)
+	local LodSize = 1
 
-	for _,block in ipairs(ChunkData) do
+	for g,block in ipairs(ChunkData) do
+		if g==1 then LodSize = block.LodSize continue end
 		local pos = Vector3.new(block[1], block[2], block[3])
 		local typ = Tables.VoxelList[block[4]]
 
 		for i=1, #typ, 3 do
 			local a,b,c = Tables.PartEdgePoints[typ[i]], Tables.PartEdgePoints[typ[i+1]], Tables.PartEdgePoints[typ[i+2]]
-			a,b,c = Vector3.new(a[1], a[2], a[3])/2 + pos, Vector3.new(b[1], b[2], b[3])/2 + pos, Vector3.new(c[1], c[2], c[3])/2 + pos
+			a,b,c = Vector3.new(a[1], a[2], a[3])/2 * LodSize + pos, Vector3.new(b[1], b[2], b[3])/2 * LodSize + pos, Vector3.new(c[1], c[2], c[3])/2 * LodSize + pos
 			a,b,c = a*BlockSize, b*BlockSize, c*BlockSize
 			
 			draw3dTriangle(a,b,c, ChunkModel)
