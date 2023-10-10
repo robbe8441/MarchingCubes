@@ -25,37 +25,40 @@ function toDecimal(b)
 	return num
 end
 
-function GetBlock(x,y,z)
-	local val = Noise:Get3DValue(x/50, y/50, z/50)
-	local Reduce = math.max(1, (y-5)/5)
-	local noise = math.noise(x/50, y/50, z/50) --Noise:Get3DValue(x/30, y/30, z/30)
-	val += noise / 4
+function GetBlock(x, y, z)
+	local Hight = math.noise(x / 200, y / 200, z / 200) * 40 + 20
+    local val = math.noise(x / 50, y / 50, z / 50) / math.max(0, (Hight - y) / 100)
 
-	return val/Reduce > 0.25
+    return val > 0.25
 end
+
+
 
 function MainModule.GenChunk(X,Y,Z, LodSize)
 	LodSize = LodSize or 1
 	local ChunkData = {{LodSize = LodSize}}
 	local ChunkPos = Vector3.new(X,Y,Z) * ChunkSize
-	local NewSize = ChunkSize / LodSize
+	local LodChunkSize = ChunkSize / LodSize
 
-	for i=0, NewSize ^ 3 - 1 do
-		local LocalData = {}
-		
-		local x = (i % NewSize) * LodSize + ChunkPos.X
-		local y = (math.floor(i / NewSize^2) % NewSize) * LodSize + ChunkPos.Y
-		local z = (math.floor(i / NewSize) % NewSize) * LodSize + ChunkPos.Z
+	for i=0, LodChunkSize ^ 3 - 1 do
+		local BlockData = {}
+		local x = (i % LodChunkSize) * LodSize + ChunkPos.X
+		local y = (math.floor(i / LodChunkSize^2) % LodChunkSize) * LodSize + ChunkPos.Y
+		local z = (math.floor(i / LodChunkSize) % LodChunkSize) * LodSize + ChunkPos.Z
 
-		for _,v in pairs(Tables.voltexdata) do
-			local v = GetBlock(x + v[1]/2*LodSize, y + v[2]/2*LodSize, z + v[3]/2*LodSize) and 1 or 0
-			table.insert(LocalData, v)
+		for i=1, #Tables.voltexdata do
+			local v = Tables.voltexdata[i]
+			local Pos = Vector3.new(x + v[1]/2*LodSize, y + v[2]/2*LodSize, z + v[3]/2*LodSize)
+
+			local IsBlock =  GetBlock(Pos.X, Pos.Y, Pos.Z) and 1 or 0
+			table.insert(BlockData, IsBlock)
 		end
 
-		local BlockType = toDecimal(table.concat(LocalData))
+		local BlockType = toDecimal(table.concat(BlockData))
 		if BlockType == 0 or BlockType == 255 then continue end
 		table.insert(ChunkData, {x,y,z, BlockType})
 	end
+
 	return ChunkData
 end
 
@@ -100,7 +103,8 @@ function MainModule.LoadChunk(ChunkData)
 	local ChunkModel = Instance.new("Model", workspace.Terrain)
 	local LodSize = 1
 
-	for g,block in ipairs(ChunkData) do
+	for g=1, #ChunkData do
+		local block = ChunkData[g]
 		if g==1 then LodSize = block.LodSize continue end
 		local pos = Vector3.new(block[1], block[2], block[3])
 		local typ = Tables.VoxelList[block[4]]
