@@ -1,5 +1,5 @@
 ---------------------- // Variables \\ ----------------------
-local ChunkSize = 16
+local ChunkSize = 32
 local BlockSize = 4
 
 local MainModule = {}
@@ -28,24 +28,43 @@ function toDecimal(b)
 end
 
 function GetBlock(x, y, z)
-	local Hight = Noise:Get2DValue(x / 200, z / 200) * 30 + 30
+	local Noiseiness = math.noise(x/500,y/500,z/500) + 0.5
+
+	local Hight = (Noise:Get2DValue(x / 200, z / 200)+0.6)^1.3 * 100 * Noiseiness
+	Hight = math.abs(Hight) + 50
+
+	local noise = math.noise(x/40,y/40,z/40) * 20 * Noiseiness
+	Hight += noise
+
     return Hight > y
 end
 
 
 function MainModule.GenChunk(X:number,Y:number,Z:number, LodSize:number?)
 	LodSize = LodSize or 1
-	local ChunkData = {{LodSize = LodSize}}
 	local ChunkPos = Vector3.new(X,Y,Z) * ChunkSize
 	local LodChunkSize = ChunkSize / LodSize
 
-	for i=0, LodChunkSize ^ 3 - 1 do
-		local BlockData = {}
+	local ChunkTabLen = LodChunkSize ^ 3
+	local ChunkData = table.create(ChunkTabLen + 1)
+	table.insert(ChunkData, {LodSize = LodSize})
+	local LastBlockGenerated = {}
+
+	for i=0, ChunkTabLen - 1 do
+		local BlockData = table.create(8)
 		local x = (i % LodChunkSize) * LodSize + ChunkPos.X
 		local y = (math.floor(i / LodChunkSize^2) % LodChunkSize) * LodSize + ChunkPos.Y
 		local z = (math.floor(i / LodChunkSize) % LodChunkSize) * LodSize + ChunkPos.Z
 
+		if LastBlockGenerated[1] == x-1 then 
+			BlockData[1] = LastBlockGenerated[2]
+			BlockData[4] = LastBlockGenerated[3]
+			BlockData[5] = LastBlockGenerated[4]
+			BlockData[8] = LastBlockGenerated[5]
+		end
+
 		for i=1, #Tables.voltexdata do
+			if BlockData[i] then continue end
 			local v = Tables.voltexdata[i]
 			local Offset = Vector3.new(v[1], v[2], v[3])
 			local Pos = Vector3.new(x, y, z) + Offset/2 * LodSize
@@ -54,6 +73,8 @@ function MainModule.GenChunk(X:number,Y:number,Z:number, LodSize:number?)
 			local IsBlock =  GetBlock(Pos.X, Pos.Y, Pos.Z) and 1 or 0
 			BlockData[i] = IsBlock
 		end
+
+		LastBlockGenerated = {x, BlockData[2], BlockData[3], BlockData[6], BlockData[7]}
 
 		local BlockType = toDecimal(table.concat(BlockData))
 		if BlockType == 0 or BlockType == 255 then continue end
