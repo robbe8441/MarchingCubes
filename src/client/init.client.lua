@@ -1,17 +1,19 @@
 --!native
 
 local MainModule = require(game.ReplicatedStorage.Shared.MainModule)
+local Settings = require(game.ReplicatedStorage.Shared.GameSettigs)
 local UIS = game:GetService("UserInputService")
 local Plr = game.Players.LocalPlayer
 local Cache = {}
-local LoadedChunks = {}
 
 
-function GetLOD(dis)
-    if dis > 1200 then return 16 end
-    if dis > 800 then return 8 end
-    if dis > 400 then return 4 end
-    if dis > 200 then return 2 end
+MainModule.GenChunk(0,0,0)
+
+
+--[[function GetLOD(dis) : number
+    for i, v in Settings.LodLevelsDis do
+        if dis >= v then return i end
+    end
     return 1
 end
 
@@ -44,48 +46,26 @@ UIS.InputBegan:Connect(function(input, gameProcessedEvent)
 end)
 
 
+local ChunkinBlocks = 64
+local Char = Plr.Character or Plr.CharacterAdded:Wait()
+local PlayerPos = Char:GetPivot().Position / ChunkinBlocks
 
-task.spawn(function()
-    local ChunkinBlocks = 64
-    while task.wait() do
-        local Char = Plr.Character or Plr.CharacterAdded:Wait()
-        local PlayerPos = Char:GetPivot().Position / ChunkinBlocks
-        
-        local LoadRange = 50
-        local Pos = RoundV3(PlayerPos) - Vector3.one * LoadRange / 2
-        local Prio = {}
 
-        for i=0, LoadRange^3 - 1 do
-            local x = i % LoadRange + Pos.X
-            local y = math.floor(i / LoadRange^2) % LoadRange + Pos.Y
-            local z = math.floor(i / LoadRange) % LoadRange + Pos.Z
-            if y < 0 or y > 100 then continue end
-            local ChunkPos = Vector3.new(x,y,z)
-            if table.find(LoadedChunks, ChunkPos) then continue end
-            table.insert(LoadedChunks, ChunkPos)
-            table.insert(Prio, ChunkPos)
-        end
+local LoadRange = Settings.MapSize
+local Prio = {}
 
-        table.sort(Prio, function(a,b)
-            return (a - PlayerPos).Magnitude < (b - PlayerPos).Magnitude
-        end)
+for i=0, LoadRange^3 - 1 do
+    local x = i % LoadRange
+    local y = math.floor(i / LoadRange^2) % LoadRange
+    local z = math.floor(i / LoadRange) % LoadRange
+    if y < 0 or y > 50 then continue end
+    local ChunkPos = Vector3.new(x,y,z)
 
-        for i,ChunkPos in pairs(Prio) do
-            local LOD = GetLOD((PlayerPos - ChunkPos).Magnitude * ChunkinBlocks)
-            local data = MainModule.GenChunk(ChunkPos.X, ChunkPos.Y, ChunkPos.Z, LOD)
-            game:GetService("RunService").RenderStepped:Wait()
-            if #data == 1 then continue end
-            table.insert(Cache, data)
-        end
-    end
-end)
+    local LOD = GetLOD((PlayerPos - ChunkPos).Magnitude * ChunkinBlocks)
+    local data = MainModule.GenChunk(ChunkPos.X, ChunkPos.Y, ChunkPos.Z, LOD)
+   
+
+end]]
 
 
 
-while task.wait() do
-    for i, data in pairs(Cache) do
-        MainModule.LoadChunk(data)
-        table.remove(Cache, i)
-        task.wait()
-    end
-end

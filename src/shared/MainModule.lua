@@ -1,18 +1,46 @@
 ---------------------- // Variables \\ ----------------------
-local ChunkSize = 32
-local BlockSize = 4
-
 local MainModule = {}
 local Noise = require(script.Parent.Noise)()
 local Tables = require(script.Parent.Tables)
+local MeshHandler = require(script.Parent.MeshHandler)
+local Settings = require(script.Parent.GameSettigs)
 MainModule.Tables = Tables
 Noise:Init()
 MainModule.BuildBlocks = {}
 
-local wedge = Instance.new("WedgePart");
-wedge.Anchored = true;
-wedge.TopSurface = Enum.SurfaceType.Smooth;
-wedge.BottomSurface = Enum.SurfaceType.Smooth;
+local ChunkSize = Settings.ChunkSize
+local BlockSize = Settings.BlockSize
+
+--------------- // Math \\ ---------------
+
+function SmoothMin(a:number, b:number, k:number)
+	local h = math.clamp((b - a + k) / (2 *k), 0,1);
+	return a * h + b * (1 - h) - k * h * (1 - h);
+end 
+
+function Bias(x:number, bias:number)
+	local k = (1-bias) ^ 3
+	return (x * k) / (x * k - x + 1);
+end
+
+function FractionalNoise(Position:Vector3)
+	local noiseSum = 0
+	local amplitude = 1
+	local frequency = 1
+
+	for i=0, 4 do
+		local Pos = Position / 300 * frequency
+		noiseSum += math.noise(Pos.X, Pos.Y, Pos.Z) * amplitude
+		frequency *= 2
+		amplitude *= 0.5
+	end
+	return noiseSum
+end
+
+
+
+
+
 
 ---------------------- // Generate ChunkData \\ ----------------------
 
@@ -28,19 +56,82 @@ function toDecimal(b)
 end
 
 function GetBlock(x, y, z)
-	local Noiseiness = math.noise(x/500,y/500,z/500) + 0.5
+	local val = FractionalNoise(Vector3.new(x,y,z)) * 2
+	local h = (y - 100) / 50
 
-	local Hight = (Noise:Get2DValue(x / 200, z / 200)+0.6)^1.3 * 100 * Noiseiness
-	Hight = math.abs(Hight) + 50
+	local Multiplyer = (math.noise(x/500,y/500,z/500) + 1) * 2
+	val = (val - h) * Multiplyer
 
-	local noise = math.noise(x/40,y/40,z/40) * 20 * Noiseiness
-	Hight += noise
+    return val
+end
 
-    return Hight > y
+function lerp(a, b, t)
+	return a + (b - a) * t
 end
 
 
-function MainModule.GenChunk(X:number,Y:number,Z:number, LodSize:number?)
+function MainModule.GenChunk(X:number,Y:number,Z:number)
+	local Mesh = MeshHandler.new()
+	local ChunkPos = Vector3.new(X,Y,Z) * ChunkSize
+
+	local IsBlockVal = 0.5
+	
+	for i=0, ChunkSize^3 - 1 do
+		local x = (i % ChunkSize) + ChunkPos.X
+		local y = (math.floor(i / ChunkSize^2) % ChunkSize) + ChunkPos.Y
+		local z = (math.floor(i / ChunkSize) % ChunkSize) + ChunkPos.Z
+		local BlockPos = (Vector3.new(x,y,z) + ChunkPos)
+
+		local VertexData = table.create(8)
+		local BlockData = table.create(8)
+		local BlockEdges = table.create(12)
+		local BlockIsEmpty = true
+
+		for i=1, #Tables.VertexPoints do
+			local Pos = (Tables.VertexPoints[i]/2 + BlockPos + ChunkPos) * BlockSize
+			local val = GetBlock(Pos.X, Pos.Y, Pos.Z)
+			if val >= IsBlockVal then BlockIsEmpty = false end
+
+			local isBlock = val >= IsBlockVal and 0 or 1
+			table.insert(VertexData, {val, Pos})
+			table.insert(BlockData, isBlock)
+		end
+
+		if BlockIsEmpty then continue end
+		local BlockType = toDecimal(table.concat(BlockData))
+		local Triangles = Tables.VoxelList[BlockType]
+		if #Triangles == 0 then continue end
+
+		for i,a in Triangles do
+			if BlockEdges[a+1] then continue end
+			local v = Tables.Edges[a+1]
+			local v1 = VertexData[v[1]]
+			local v2 = VertexData[v[2]]
+
+			local mu = (IsBlockVal - v1[1]) / (v2[1] - v1[1])
+			local id = Mesh:AddVertex(lerp(v1[2], v2[2], mu))
+			BlockEdges[a+1] = id
+		end
+
+		for i=1, #Triangles, 3 do
+			local a = Triangles[i] +1
+			local b = Triangles[i + 1] +1
+			local c = Triangles[i + 2] +1
+
+			Mesh:AddFace(BlockEdges[a],BlockEdges[b],BlockEdges[c])
+		end
+	end
+	Mesh:Load()
+end
+
+
+
+
+
+
+
+
+--[[function MainModule.GenChunk(X:number,Y:number,Z:number, LodSize:number?)
 	LodSize = LodSize or 1
 	local ChunkPos = Vector3.new(X,Y,Z) * ChunkSize
 	local LodChunkSize = ChunkSize / LodSize
@@ -82,46 +173,17 @@ function MainModule.GenChunk(X:number,Y:number,Z:number, LodSize:number?)
 	end
 
 	return ChunkData
-end
+end]]
 
 
 ---------------------- // Generate Blocks \\ ----------------------
 
 
 
-function draw3dTriangle(a, b, c, parent)
-	local ab, ac, bc = b - a, c - a, c - b;
-	local abd, acd, bcd = ab:Dot(ab), ac:Dot(ac), bc:Dot(bc);
-
-	if (abd > acd and abd > bcd) then
-		c, a = a, c;
-	elseif (acd > bcd and acd > abd) then
-		a, b = b, a;
-	end
-
-	ab, ac, bc = b - a, c - a, c - b;
-
-	local right = ac:Cross(ab).unit;
-	local up = bc:Cross(right).unit;
-	local back = bc.unit;
-
-	local height = math.abs(ab:Dot(up));
-
-	local w1 = wedge:Clone();
-	w1.Size = Vector3.new(0, height, math.abs(ab:Dot(back)));
-	w1.CFrame = CFrame.fromMatrix((a + b)/2, right, up, back);
-	w1.Parent = parent;
-
-	local w2 = wedge:Clone();
-	w2.Size = Vector3.new(0, height, math.abs(ac:Dot(back)));
-	w2.CFrame = CFrame.fromMatrix((a + c)/2, -right, up, -back);
-	w2.Parent = parent;
-
-	return w1, w2;
-end
 
 
-function MainModule.LoadChunk(ChunkData)
+
+--[=[function MainModule.LoadChunk(ChunkData)
 	local ChunkModel = Instance.new("Model", workspace.Terrain)
 	local LodSize = 1
 
@@ -218,6 +280,6 @@ function MainModule.RayCast(vOrigin:Vector3, vGoal:Vector3)
     return vOrigin + vRayDir * fCurrentDis
 end
 
-
+]=]
 
 return MainModule
