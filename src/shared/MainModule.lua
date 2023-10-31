@@ -11,7 +11,11 @@ MainModule.BuildBlocks = {}
 local ChunkSize = Settings.ChunkSize
 local BlockSize = Settings.BlockSize
 
---------------- // Math \\ ---------------
+----------------------------- // Math Functions \\ -----------------------------
+
+function lerp(a, b, t)
+	return a + (b - a) * t
+end
 
 function SmoothMin(a:number, b:number, k:number)
 	local h = math.clamp((b - a + k) / (2 *k), 0,1);
@@ -28,21 +32,14 @@ function FractionalNoise(Position:Vector3)
 	local amplitude = 1
 	local frequency = 1
 
-	for i=0, 4 do
+	for i=0, 5 do
 		local Pos = Position / 300 * frequency
 		noiseSum += math.noise(Pos.X, Pos.Y, Pos.Z) * amplitude
-		frequency *= 2
+		frequency *= 1.75
 		amplitude *= 0.5
 	end
 	return noiseSum
 end
-
-
-
-
-
-
----------------------- // Generate ChunkData \\ ----------------------
 
 function toDecimal(b)
 	local num = 0
@@ -55,9 +52,10 @@ function toDecimal(b)
 	return num
 end
 
+
 function GetBlock(x, y, z)
-	local val = FractionalNoise(Vector3.new(x,y,z)) * 2
-	local h = (y - 100) / 50
+	local val = FractionalNoise(Vector3.new(x,y,z)) * 4
+	local h = (y - 200) / 50
 
 	local Multiplyer = (math.noise(x/500,y/500,z/500) + 1) * 2
 	val = (val - h) * Multiplyer
@@ -65,22 +63,27 @@ function GetBlock(x, y, z)
     return val
 end
 
-function lerp(a, b, t)
-	return a + (b - a) * t
-end
 
 
-function MainModule.GenChunk(X:number,Y:number,Z:number)
+----------------------------- // Generate ChunkData \\ -----------------------------
+
+
+function MainModule.GenChunk(X:number,Y:number,Z:number, LOD:number)
 	local Mesh = MeshHandler.new()
-	local ChunkPos = Vector3.new(X,Y,Z) * ChunkSize
+	local ChunkPos = Vector3.new(X,Y,Z)
 
 	local IsBlockVal = 0.5
+	local ChunkSize = ChunkSize / LOD
+	local BlockSize = BlockSize * LOD
 	
 	for i=0, ChunkSize^3 - 1 do
-		local x = (i % ChunkSize) + ChunkPos.X
-		local y = (math.floor(i / ChunkSize^2) % ChunkSize) + ChunkPos.Y
-		local z = (math.floor(i / ChunkSize) % ChunkSize) + ChunkPos.Z
-		local BlockPos = (Vector3.new(x,y,z) + ChunkPos)
+		
+		if (i+1)% 10000 == 0 then task.wait() end
+		local x = (i % ChunkSize)
+		local y = (math.floor(i / ChunkSize^2) % ChunkSize)
+		local z = (math.floor(i / ChunkSize) % ChunkSize)
+		local offset = Vector3.one * BlockSize / 2
+		local BlockPos = (Vector3.new(x,y,z) + ChunkPos*ChunkSize) * BlockSize + offset
 
 		local VertexData = table.create(8)
 		local BlockData = table.create(8)
@@ -88,12 +91,12 @@ function MainModule.GenChunk(X:number,Y:number,Z:number)
 		local BlockIsEmpty = true
 
 		for i=1, #Tables.VertexPoints do
-			local Pos = (Tables.VertexPoints[i]/2 + BlockPos + ChunkPos) * BlockSize
+			local Pos = (Tables.VertexPoints[i]/2) * BlockSize + BlockPos
 			local val = GetBlock(Pos.X, Pos.Y, Pos.Z)
 			if val >= IsBlockVal then BlockIsEmpty = false end
 
 			local isBlock = val >= IsBlockVal and 0 or 1
-			table.insert(VertexData, {val, Pos})
+			table.insert(VertexData, {val=val, pos=Pos})
 			table.insert(BlockData, isBlock)
 		end
 
@@ -102,14 +105,28 @@ function MainModule.GenChunk(X:number,Y:number,Z:number)
 		local Triangles = Tables.VoxelList[BlockType]
 		if #Triangles == 0 then continue end
 
+		local UsedCorners = 0
+		local NormalDir = Vector3.zero
+
+		for i=1, #VertexData do
+			local Vert = VertexData[i]
+			if Vert.val > IsBlockVal then continue end
+			UsedCorners += 1
+			NormalDir += Vert.pos - BlockPos
+		end
+
+		NormalDir = (NormalDir / UsedCorners).Unit
+
 		for i,a in Triangles do
 			if BlockEdges[a+1] then continue end
-			local v = Tables.Edges[a+1]
-			local v1 = VertexData[v[1]]
-			local v2 = VertexData[v[2]]
+			local Edge = Tables.Edges[a+1]
+			local vert1 = VertexData[Edge[1]]
+			local vert2 = VertexData[Edge[2]]
 
-			local mu = (IsBlockVal - v1[1]) / (v2[1] - v1[1])
-			local id = Mesh:AddVertex(lerp(v1[2], v2[2], mu))
+			local mu = (IsBlockVal - vert1.val) / (vert2.val - vert1.val)
+			local Pos = lerp(vert1.pos, vert2.pos, mu)
+
+			local id = Mesh:AddVertex(Pos, NormalDir)
 			BlockEdges[a+1] = id
 		end
 
@@ -121,8 +138,10 @@ function MainModule.GenChunk(X:number,Y:number,Z:number)
 			Mesh:AddFace(BlockEdges[a],BlockEdges[b],BlockEdges[c])
 		end
 	end
-	Mesh:Load()
+	return Mesh
 end
+
+
 
 
 
