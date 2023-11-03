@@ -3,8 +3,6 @@
 made by robbe8441 in Roblox luau
 
 
-
-
 ![Work in progress image (with Holes between LODs) : ](https://media.discordapp.net/attachments/840662676560150552/1169928279176777779/image.png?ex=65572f9d&is=6544ba9d&hm=14318844ed64f77024cb597b2b11990082e2d376f32f3056800ce59bfc8fece0&=&width=1058&height=671)
 
 
