@@ -1,3 +1,4 @@
+local PartCache = {}
 local Mesh = {}
 Mesh.__index = Mesh
 
@@ -7,6 +8,8 @@ wedge.TopSurface = Enum.SurfaceType.Smooth;
 wedge.BottomSurface = Enum.SurfaceType.Smooth;
 wedge.Color = Color3.fromRGB(104, 74, 49)
 
+
+-- // Function go Generate Trianges using Wedges, source : https://github.com/EgoMoose/Articles/blob/master/3d%20triangles/3D%20triangles.md
 function draw3dTriangle(a, b, c, normal ,parent)
 	local ab, ac, bc = b - a, c - a, c - b;
 	local abd, acd, bcd = ab:Dot(ab), ac:Dot(ac), bc:Dot(bc);
@@ -25,12 +28,14 @@ function draw3dTriangle(a, b, c, normal ,parent)
 
 	local height = math.abs(ab:Dot(up));
 
-	local w1 = wedge:Clone();
+	local w1 = PartCache[1] or wedge:Clone();
+	table.remove(PartCache, 1)
 	w1.Size = Vector3.new(0, height, math.abs(ab:Dot(back)));
 	w1.CFrame = CFrame.fromMatrix((a + b)/2, right, up, back);
 	w1.Parent = parent;
 	
-	local w2 = wedge:Clone();
+	local w2 = PartCache[1] or wedge:Clone();
+	table.remove(PartCache, 1)
 	w2.Size = Vector3.new(0, height, math.abs(ac:Dot(back)));
 	w2.CFrame = CFrame.fromMatrix((a + c)/2, -right, up, -back);
 	w2.Parent = parent;
@@ -58,13 +63,14 @@ end
 function Mesh.new()
     return setmetatable({
         Vertexes = {},
-        Faces = {}
+        Faces = {},
+		Parts = {},
+		Info = {}
     }, Mesh)
 end
 
 
 function Mesh:AddVertex(pos:Vector3, Normal:Vector3) : number
-
 	for i=1, #self.Vertexes do
 		local v = self.Vertexes[i]
 		if v.Position == pos then 
@@ -85,18 +91,10 @@ end
 
 
 
-function Mesh:Optimise()
-
-end
-
-
-
-
-
-
 function Mesh:Load()
+	local Model = Instance.new("Model", workspace.Terrain)
     for i=1, #self.Faces do
-        if i%100 == 0 then task.wait() end
+        if i%200 == 0 then task.wait() end -- slow it down a bit when loading big chunks
         local FaceData = self.Faces[i]
 		local a = self.Vertexes[FaceData.a]
 		local b = self.Vertexes[FaceData.b]
@@ -104,10 +102,19 @@ function Mesh:Load()
 
 		local Normal = (a.Normal + b.Normal + c.Normal) / 3
 
-        draw3dTriangle(a.Position, b.Position, c.Position, Normal ,workspace.Terrain)
+        local w1, w2 = draw3dTriangle(a.Position, b.Position, c.Position, Normal ,Model)
+		table.insert(self.Parts, w1)
+		table.insert(self.Parts, w2)
     end
+end
 
-	print(#self.Vertexes)
+
+function Mesh:Unload()
+	for i,v in ipairs(self.Parts) do
+		v.Position = Vector3.new(0,3000,0)
+		table.insert(PartCache, v)
+	end
+	table.clear(self)
 end
 
 
@@ -145,7 +152,6 @@ function Mesh:ToObj()
 	end
 
 	print(res)
-	warn(self)
 	print(table.concat(res, "\n"))
 end
 
